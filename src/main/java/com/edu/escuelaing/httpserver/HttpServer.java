@@ -12,9 +12,9 @@ import java.net.*;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.Logger;
 /**
  *
  * @author santiago.gualdron-r
@@ -22,10 +22,11 @@ import java.util.logging.Logger;
 public class HttpServer {
     
     public static Map<String, Method> services = new HashMap<>();
+    private static final String directory = "src/main/java/com/edu/escuelaing/httpserver/resources";
 
-    public static void loadServices(String[] args) throws ClassNotFoundException{
+    public static void loadServices() throws ClassNotFoundException{
         try{
-            Class c = Class.forName(args[0]);
+            Class c = Class.forName("com.edu.escuelaing.httpserver.anotations.GreetingController");
             
             if (c.isAnnotationPresent(RestController.class)){
                 Method[] methods = c.getDeclaredMethods();
@@ -42,7 +43,7 @@ public class HttpServer {
     }
     
     public static void runServer(String[] args) throws IOException, URISyntaxException, ClassNotFoundException {
-        loadServices(args);
+        loadServices();
         ServerSocket serverSocket = null;
         try {
             serverSocket = new ServerSocket(35000);
@@ -89,7 +90,7 @@ public class HttpServer {
             } else {
                 //Leo del disco
 
-                outputLine = defaultResponse();
+                outputLine = serveStaticFile(requri.getPath());
             }
             out.println(outputLine);
 
@@ -102,9 +103,9 @@ public class HttpServer {
 
     private static String helloService(URI requesturi) {
         //Encabezado con content-type adaptado para retornar un JSON        
-        String response = "HTTP/1.1 200 OK\n\r"
-                + "content-type: application/json\n\r"
-                + "\n\r";
+        String response = "HTTP/1.1 200 OK\r\n"
+                + "content-type: application/json\r\n"
+                + "\r\n";
         //Extrae el valor de "name" desde el query.
         String name = requesturi.getQuery().split("=")[1]; //name=jhon
 
@@ -113,11 +114,34 @@ public class HttpServer {
         return response;
     }
 
+    private static String serveStaticFile(String path) {
+        if (path.equals("/")) {
+            path = "/index.html";
+        }
+
+        File file = new File(directory + path);
+        if (!file.exists() || file.isDirectory()) {
+            return error404();
+        }
+
+        try {
+            byte[] fileContent = Files.readAllBytes(file.toPath());
+            String contentType = getContentType(path);
+            return "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: " + contentType + "\r\n" +
+                    "Content-Length: " + fileContent.length + "\r\n" +
+                    "\r\n" +
+                    new String(fileContent);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return error500();
+        }
+    }
 
     private static String invokeService(URI requri) {
-        String header = "HTTP/1.1 200 OK\n\r"
-                + "content-type: text/html\n\r"
-                + "\n\r";
+        String header = "HTTP/1.1 200 OK\r\n"
+                + "content-type: text/html\r\n"
+                + "\r\n";
         try{
             HttpRequest req = new HttpRequest(requri);
             HttpResponse res = new HttpResponse();
@@ -143,60 +167,28 @@ public class HttpServer {
 
     public static void staticfiles(String localFilesPath) {
     }
-
-    public static String defaultResponse() {
-        return "HTTP/1.1 200 OK\r\n"
-                + "content-type: text/html\r\n"
-                + "\r\n"
-                + "<!DOCTYPE html>\n"
-                + "<html>\n"
-                + "<head>\n"
-                + "<title>Form Example</title>\n"
-                + "<meta charset=\"UTF-8\">\n"
-                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
-                + "</head>\n"
-                + "<body>\n"
-                + "<h1>Form with GET</h1>\n"
-                + "<form action=\"/hello\">\n"
-                + "<label for=\"name\">Name:</label><br>\n"
-                + "<input type=\"text\" id=\"name\" name=\"name\" value=\"John\"><br><br>\n"
-                + "<input type=\"button\" value=\"Submit\" onclick=\"loadGetMsg()\">\n"
-                + "</form>\n"
-                + "<div id=\"getrespmsg\"></div>\n"
-                + " \n"
-                + "<script>\n"
-                + "function loadGetMsg() {\n"
-                + "let nameVar = document.getElementById(\"name\").value;\n"
-                + "const xhttp = new XMLHttpRequest();\n"
-                + "xhttp.onload = function() {\n"
-                + "document.getElementById(\"getrespmsg\").innerHTML =\n"
-                + "this.responseText;\n"
-                + "}\n"
-                + "xhttp.open(\"GET\", \"/app/hello?name=\"+nameVar);\n"
-                + "xhttp.send();\n"
-                + "}\n"
-                + "</script>\n"
-                + " \n"
-                + "<h1>Form with POST</h1>\n"
-                + "<form action=\"/hellopost\">\n"
-                + "<label for=\"postname\">Name:</label><br>\n"
-                + "<input type=\"text\" id=\"postname\" name=\"name\" value=\"John\"><br><br>\n"
-                + "<input type=\"button\" value=\"Submit\" onclick=\"loadPostMsg(postname)\">\n"
-                + "</form>\n"
-                + " \n"
-                + "<div id=\"postrespmsg\"></div>\n"
-                + " \n"
-                + "<script>\n"
-                + "function loadPostMsg(name){\n"
-                + "let url = \"/hellopost?name=\" + name.value;\n"
-                + " \n"
-                + "fetch (url, {method: 'POST'})\n"
-                + ".then(x => x.text())\n"
-                + ".then(y => document.getElementById(\"postrespmsg\").innerHTML = y);\n"
-                + "}\n"
-                + "</script>\n"
-                + "</body>\n"
-                + "</html>";
+    
+    private static String error404() {
+        return "HTTP/1.1 404 Not Found\r\n" +
+                "Content-Type: text/html\r\n" +
+                "\r\n" +
+                "<h1>404 Not Found</h1>";
+    }
+    
+    private static String error500() {
+        return "HTTP/1.1 500 Internal Server Error\r\n" +
+                "Content-Type: text/html\r\n" +
+                "\r\n" +
+                "<h1>500 Internal Server Error</h1>";
     }
 
+    private static String getContentType(String fileName) {
+        if (fileName.endsWith(".html")) return "text/html";
+        if (fileName.endsWith(".css")) return "text/css";
+        if (fileName.endsWith(".js")) return "application/javascript";
+        if (fileName.endsWith(".png")) return "image/png";
+        if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) return "image/jpeg";
+        if (fileName.endsWith(".gif")) return "image/gif";
+        return "text/plain";
+    }
 }

@@ -1,4 +1,4 @@
-<img width="510" height="165" alt="image" src="https://github.com/user-attachments/assets/eac5f902-73a0-4eb4-a48c-c8c73b8e24f4" /># Taller de Arquitecturas de Servidores de Aplicaciones, Meta protocolos de objetos, Patrón IoC, Reflexión
+# Taller de Arquitecturas de Servidores de Aplicaciones, Meta protocolos de objetos, Patrón IoC, Reflexión
 
 La intención de este taller, es mostrar el desarrollo para la implementacion de un servidor Web en java (tipo APACHE) el cual entrega una página completa HTML con imagenes y diseño, al igual que aplicaciones web a partir de POJOS
 

@@ -1,3 +1,4 @@
+
 /*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  */
@@ -58,44 +59,43 @@ public class HttpServer {
             try {
                 System.out.println("Listo para recibir ...");
                 clientSocket = serverSocket.accept();
+
+                PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
+                BufferedReader in = new BufferedReader(
+                        new InputStreamReader(
+                                clientSocket.getInputStream()));
+                String inputLine, outputLine;
+
+                String path = null;
+                boolean firstline = true;
+                URI requri = null;
+
+                while ((inputLine = in.readLine()) != null) {
+                    if (firstline) {
+                        requri = new URI(inputLine.split(" ")[1]);
+                        System.out.println("Path: " + requri.getPath());
+                        firstline = false;
+                    }
+                    System.out.println("Received: " + inputLine);
+                    if (!in.ready()) {
+                        break;
+                    }
+                }
+
+                if (requri.getPath().startsWith("/app")) {
+                    outputLine = invokeService(requri);
+                    out.println(outputLine);
+                } else {
+                    // Pasamos PrintWriter y OutputStream
+                    serveStaticFile(requri.getPath(), out, clientSocket.getOutputStream());
+                }
+
+                out.close();
+                in.close();
             } catch (IOException e) {
                 System.err.println("Accept failed.");
                 System.exit(1);
             }
-
-            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(
-                    new InputStreamReader(
-                            clientSocket.getInputStream()));
-            String inputLine, outputLine;
-
-            String path = null;
-            boolean firstline = true;
-            URI requri = null;
-
-            while ((inputLine = in.readLine()) != null) {
-                if (firstline) {
-                    requri = new URI(inputLine.split(" ")[1]);
-                    System.out.println("Path: " + requri.getPath());
-                    firstline = false;
-                }
-                System.out.println("Received: " + inputLine);
-                if (!in.ready()) {
-                    break;
-                }
-            }
-
-            if (requri.getPath().startsWith("/app")) {
-                outputLine = invokeService(requri);
-            } else {
-                //Leo del disco
-
-                outputLine = serveStaticFile(requri.getPath());
-            }
-            out.println(outputLine);
-
-            out.close();
-            in.close();
             clientSocket.close();
         }
         serverSocket.close();
@@ -114,27 +114,42 @@ public class HttpServer {
         return response;
     }
 
-    private static String serveStaticFile(String path) {
+    private static void serveStaticFile(String path, PrintWriter out, OutputStream rawOut) {
         if (path.equals("/")) {
             path = "/index.html";
         }
 
         File file = new File(directory + path);
         if (!file.exists() || file.isDirectory()) {
-            return error404();
+            out.println(error404());
+            return;
         }
 
         try {
             byte[] fileContent = Files.readAllBytes(file.toPath());
             String contentType = getContentType(path);
-            return "HTTP/1.1 200 OK\r\n" +
+
+            // --- Cabecera HTTP ---
+            String header = "HTTP/1.1 200 OK\r\n" +
                     "Content-Type: " + contentType + "\r\n" +
                     "Content-Length: " + fileContent.length + "\r\n" +
-                    "\r\n" +
-                    new String(fileContent);
+                    "\r\n";
+
+            // --- Si es imagen/binario ---
+            if (contentType.startsWith("image/")) {
+                rawOut.write(header.getBytes());
+                rawOut.write(fileContent);
+                rawOut.flush();
+            } else {
+                // --- Si es texto (html, css, js, etc.) ---
+                out.println(header);
+                out.println(new String(fileContent));
+                out.flush();
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
-            return error500();
+            out.println(error500());
         }
     }
 
